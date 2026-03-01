@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 水印去除器 - 纯前端工具</title>
+    <meta name="description" content="一键去除 AI 生成图片的水印标识，100% 客户端处理，保护隐私"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', '"Noto Sans SC"', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#2563EB',
+                        secondary: '#3B82F6',
+                        cta: '#F97316',
+                        background: '#F8FAFC',
+                        surface: '#FFFFFF',
+                        'text-primary': '#1E293B',
+                        'text-secondary': '#64748B',
+                        'text-muted': '#94A3B8',
+                        border: '#E2E8F0',
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02)',
+                        'soft-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.03), 0 4px 6px -2px rgba(0, 0, 0, 0.02)',
+                        'glow': '0 0 20px rgba(37, 99, 235, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            font-feature-settings: "cv11", "ss01";
+            font-variation-settings: "opsz" 32;
+        }
+
+        .anchor-target {
+            scroll-margin-top: 88px;
+        }
+
+        .section-stage {
+            position: relative;
+            min-height: calc(100vh - 72px);
+            padding-top: 88px;
+            padding-bottom: 40px;
+            background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
+            overflow: hidden;
+        }
+
+        .section-stage::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-size: 40px 40px;
+            background-image: radial-gradient(circle, rgba(148, 163, 184, 0.22) 1px, transparent 1px);
+            opacity: 0.35;
+            pointer-events: none;
+        }
+
+        .section-stage::after {
+            content: "";
+            position: absolute;
+            top: -180px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(900px, 90vw);
+            height: 340px;
+            background: radial-gradient(ellipse at center, rgba(37, 99, 235, 0.10) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .section-stage > * {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #2563EB 0%, #3B82F6 50%, #60A5FA 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .hero-gradient {
+            background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37, 99, 235, 0.15), transparent);
+        }
+        
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px -15px rgba(37, 99, 235, 0.15);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #2563EB 0%, #3B82F6 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px -10px rgba(37, 99, 235, 0.5);
+        }
+        
+        .dashed-upload {
+            background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='24' ry='24' stroke='%232563EB' stroke-width='2' stroke-dasharray='12%2c 12' stroke-dashoffset='0' stroke-linecap='round'/%3e%3c/svg%3e");
+        }
+        
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        .animate-pulse-slow {
+            animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .7; }
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .tech-grid {
+            background-size: 40px 40px;
+            background-image: radial-gradient(circle, #E2E8F0 1px, transparent 1px);
+        }
+        
+        /* Processing Animation */
+        .processing-bg {
+            background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+        }
+        
+        .processing-spinner {
+            width: 80px;
+            height: 80px;
+            border: 4px solid #E0E7FF;
+            border-top: 4px solid #2563EB;
+            border-right: 4px solid #3B82F6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .processing-pulse {
+            animation: processingPulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes processingPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 1000;
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        .toast.show {
+            transform: translateX(0);
+        }
+        
+        .toast-success {
+            background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+        }
+        
+        /* Result Card */
+        .result-card {
+            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @keyframes slideUp {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Fade in */
+        .fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-background text-text-primary antialiased">
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast toast-success px-6 py-4 rounded-2xl shadow-lg flex items-center gap-3">
+        <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+            <i data-lucide="check" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+            <div class="font-semibold text-white">处理成功！</div>
+            <div class="text-sm text-white/80" id="toast-message">图片已自动下载</div>
+        </div>
+    </div>
+    
+    <!-- Navigation -->
+    <nav id="main-nav" class="fixed top-0 left-0 right-0 z-50 glass-effect border-b border-border/50">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="relative grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                <div class="flex items-center gap-3 justify-self-start">
+                    <div class="w-11 h-11 rounded-2xl bg-primary shadow-glow flex items-center justify-center">
+                        <i data-lucide="eraser" class="w-5 h-5 text-white"></i>
+                    </div>
+                    <span class="text-xl font-bold tracking-tight">AI 水印去除器</span>
+                </div>
+                
+                <div class="hidden md:flex items-center justify-center gap-8 lg:gap-10 text-base lg:text-[17px] font-semibold text-text-secondary">
+                    <a href="#start-processing" data-nav-target="#start-processing" class="px-1 py-2 hover:text-primary transition-colors">开始处理</a>
+                    <a href="#result-section" data-nav-target="#result-section" class="px-1 py-2 hover:text-primary transition-colors">结果预览</a>
+                    <a href="#features" data-nav-target="#features" class="px-1 py-2 hover:text-primary transition-colors">功能特点</a>
+                    <a href="#faq" data-nav-target="#faq" class="px-1 py-2 hover:text-primary transition-colors">常见问题</a>
+                </div>
+                
+                <div class="flex items-center justify-end gap-3 justify-self-end">
+                    <a href="https://github.com/dearabhin/gemini-watermark-remover" target="_blank" class="p-2 text-text-secondary hover:text-primary transition-colors">
+                        <i data-lucide="github" class="w-5 h-5"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="start-processing" class="min-h-screen hero-gradient pt-24 anchor-target">
+        <div class="absolute inset-0 tech-grid opacity-50"></div>
+        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse-slow"></div>
+        <div class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cta/10 rounded-full blur-3xl animate-pulse-slow" style="animation-delay: 2s;"></div>
+        
+        <div class="relative z-10 max-w-5xl mx-auto px-6 pt-16 pb-12">
+            <!-- Badge -->
+            <div class="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-soft mb-8 border border-border">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span class="text-sm font-medium text-text-secondary">100% 客户端处理 · 保护隐私</span>
+            </div>
+            
+            <!-- Main Heading -->
+            <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight mb-6 leading-tight text-center">
+                去除 AI 图片水印
+                <span class="gradient-text">一键搞定</span>
+            </h1>
+            <p class="text-xl text-text-secondary max-w-2xl mx-auto mb-12 leading-relaxed text-center">
+                移除 Gemini AI 生成的"✨"水印标识，纯浏览器端处理，图片不上传服务器，
+                <br class="hidden md:block">完全免费，无任何使用限制。
+            </p>
+            
+            <!-- Upload Area -->
+            <div id="work" class="max-w-3xl mx-auto">
+                <div class="bg-white rounded-[32px] p-8 border border-border shadow-soft-lg">
+                    <!-- Upload -->
+                    <div id="upload-area" 
+                         onclick="document.getElementById('file-input').click()"
+                         ondrop="handleDrop(event)"
+                         ondragover="handleDragOver(event)"
+                         ondragleave="handleDragLeave(event)"
+                         class="w-full h-64 rounded-3xl dashed-upload bg-primary/5 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-primary/10 mb-6 relative overflow-hidden">
+                        
+                        <input type="file" id="file-input" class="hidden" accept="image/*" multiple onchange="handleFileSelect(this)">
+                        
+                        <div id="upload-content" class="text-center z-10">
+                            <div class="w-16 h-16 bg-white text-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-soft">
+                                <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-text-primary mb-1">拖入图片或点击选择</h3>
+                            <p class="text-text-muted text-sm">支持 PNG、JPG、WebP</p>
+                        </div>
+                        
+                        <div id="file-info" class="hidden text-center z-10">
+                            <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <i data-lucide="file-check" class="w-8 h-8"></i>
+                            </div>
+                            <h3 id="filename" class="text-lg font-bold text-text-primary mb-1 truncate max-w-xs"></h3>
+                            <p id="filesize" class="text-text-muted text-sm"></p>
+                        </div>
+                        
+                        <div id="upload-overlay" class="absolute inset-0 bg-primary/10 opacity-0 transition-opacity pointer-events-none"></div>
+                    </div>
+                    
+                    <!-- Process Button -->
+                    <button id="process-btn" onclick="startProcessing()" disabled 
+                            class="w-full btn-primary py-4 text-white text-lg font-semibold rounded-2xl flex items-center justify-center gap-3 opacity-50 cursor-not-allowed">
+                        <span>开始去除水印</span>
+                        <i data-lucide="wand-2" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                
+                <!-- Security Note -->
+                <div class="mt-6 flex items-center justify-center gap-6 text-text-muted text-sm">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                        <span>本地处理</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="eye-off" class="w-4 h-4"></i>
+                        <span>不上传服务器</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="zap" class="w-4 h-4"></i>
+                        <span>完全免费</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Scroll Hint -->
+        <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-bounce cursor-pointer" onclick="scrollToFeatures()">
+            <span class="text-xs font-medium text-text-secondary">了解更多</span>
+            <i data-lucide="chevron-down" class="w-5 h-5 text-text-secondary"></i>
+        </div>
+    </section>
+
+    <!-- Processing Overlay -->
+    <div id="processing-overlay" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 processing-bg backdrop-blur-sm"></div>
+        <div class="relative z-10 min-h-screen flex flex-col items-center justify-center">
+            <div class="processing-spinner mb-6"></div>
+            <h3 class="text-2xl font-bold text-text-primary mb-2 processing-pulse">正在去除水印...</h3>
+            <p class="text-text-secondary">请稍候，马上就好</p>
+        </div>
+    </div>
+
+    <!-- Result Section -->
+    <section id="result-section" class="section-stage anchor-target">
+        <div class="max-w-[1500px] mx-auto px-4 md:px-8">
+            <div id="result-preview-anchor" class="text-center mb-6 anchor-target">
+                <span id="result-status-badge" class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-text-secondary text-sm font-semibold rounded-full mb-4">
+                    <span id="result-status-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+                    <span id="result-status-label">等待处理</span>
+                </span>
+                <h2 class="text-3xl md:text-4xl font-bold text-text-primary">结果预览</h2>
+                <p id="result-status-text" class="mt-2 text-text-secondary">上传图片并点击开始处理后，这里会展示前后对比图</p>
+            </div>
+            
+            <!-- Result Cards -->
+            <div id="result-cards" class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+                <!-- Original -->
+                <div class="bg-background rounded-3xl border border-border overflow-hidden shadow-soft-lg">
+                    <div class="px-5 py-4 border-b border-border grid grid-cols-[1fr_auto_1fr] items-center">
+                        <span class="justify-self-start"></span>
+                        <span class="text-base md:text-lg font-bold text-text-primary text-center">原图</span>
+                        <span id="original-size" class="justify-self-end text-sm text-text-muted"></span>
+                    </div>
+                    <div class="p-4">
+                        <div id="original-placeholder" class="w-full min-h-[220px] h-[30vh] md:h-[34vh] lg:h-[38vh] max-h-[500px] rounded-xl bg-white border border-dashed border-border flex flex-col items-center justify-center text-text-muted">
+                            <i data-lucide="image-up" class="w-10 h-10 mb-3"></i>
+                            <p class="font-medium">等待上传原图</p>
+                        </div>
+                        <img id="original-image" class="hidden w-full min-h-[220px] h-[30vh] md:h-[34vh] lg:h-[38vh] max-h-[500px] object-contain rounded-xl bg-white" alt="原图">
+                    </div>
+                </div>
+                
+                <!-- Result -->
+                <div class="bg-background rounded-3xl border-2 border-primary/30 overflow-hidden shadow-soft-lg result-card">
+                    <div class="px-5 py-4 border-b border-border bg-primary/5 grid grid-cols-[1fr_auto_1fr] items-center">
+                        <span class="justify-self-start"></span>
+                        <span class="text-base md:text-lg font-bold text-primary text-center">去除水印后</span>
+                        <span class="justify-self-end text-sm text-text-muted">PNG</span>
+                    </div>
+                    <div class="p-4">
+                        <div id="result-placeholder" class="w-full min-h-[220px] h-[30vh] md:h-[34vh] lg:h-[38vh] max-h-[500px] rounded-xl bg-white border border-dashed border-primary/30 flex flex-col items-center justify-center text-text-secondary">
+                            <i data-lucide="wand-sparkles" class="w-10 h-10 mb-3 text-primary"></i>
+                            <p id="result-placeholder-title" class="font-medium">等待处理结果</p>
+                            <p id="result-placeholder-desc" class="text-sm text-text-muted mt-1">处理完成后会在这里实时预览</p>
+                        </div>
+                        <img id="result-image" class="hidden w-full min-h-[220px] h-[30vh] md:h-[34vh] lg:h-[38vh] max-h-[500px] object-contain rounded-xl bg-white" alt="结果图">
+                    </div>
+                    <div class="px-5 py-4 border-t border-border bg-white">
+                        <button id="download-btn" onclick="downloadResult()" disabled class="w-full btn-primary py-4 text-white text-lg font-semibold rounded-xl flex items-center justify-center gap-2 opacity-50 cursor-not-allowed">
+                            <i data-lucide="download" class="w-5 h-5"></i>
+                            下载图片
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Process Another -->
+            <div class="text-center">
+                <button onclick="resetApp()" class="px-6 py-3 text-text-secondary font-medium rounded-xl border border-border hover:border-primary hover:text-primary transition-all inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-5 h-5"></i>
+                    处理下一张
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="section-stage anchor-target">
+        <div class="max-w-6xl mx-auto px-6">
+            <div id="features-anchor" class="text-center mb-16 anchor-target">
+                <span class="inline-block px-4 py-1.5 bg-primary/10 text-primary text-sm font-semibold rounded-full mb-4">
+                    核心特点
+                </span>
+                <h2 class="text-4xl font-bold mb-4">为什么选择我们？</h2>
+                <p class="text-lg text-text-secondary max-w-2xl mx-auto">
+                    简单、安全、免费
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="feature-card group p-8 bg-white rounded-2xl border border-border card-hover">
+                    <div class="w-14 h-14 bg-blue-50 text-primary rounded-2xl flex items-center justify-center mb-6">
+                        <i data-lucide="lock" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">隐私保护</h3>
+                    <p class="text-text-secondary leading-relaxed">
+                        100% 客户端处理，图片在浏览器内完成处理，不上传任何服务器，真正的隐私安全。
+                    </p>
+                </div>
+                
+                <!-- Feature 2 -->
+                <div class="feature-card group p-8 bg-white rounded-2xl border border-border card-hover">
+                    <div class="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
+                        <i data-lucide="sparkles" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">无损画质</h3>
+                    <p class="text-text-secondary leading-relaxed">
+                        采用数学算法精确还原原始像素，去除水印后图片质量保持 100%，无压缩无失真。
+                    </p>
+                </div>
+                
+                <!-- Feature 3 -->
+                <div class="feature-card group p-8 bg-white rounded-2xl border border-border card-hover">
+                    <div class="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-6">
+                        <i data-lucide="zap" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">快速免费</h3>
+                    <p class="text-text-secondary leading-relaxed">
+                        无需注册，无需付费，随时可用。处理速度取决于图片大小，一般只需几秒钟。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Note Section -->
+    <section class="py-16 bg-white">
+        <div class="max-w-4xl mx-auto px-6">
+            <div class="bg-amber-50 rounded-2xl p-6 border border-amber-200">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                        <i data-lucide="info" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-amber-800 mb-2">使用说明</h4>
+                        <ul class="text-sm text-amber-700 space-y-2">
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+                                <span>请使用 Gemini 实际下载的图片文件，不要使用右键"另存为"</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+                                <span>不支持截图或剪贴板图片</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+                                <span>此工具仅去除可见水印，不去除 Google SynthID 隐形水印</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="section-stage anchor-target">
+        <div class="max-w-3xl mx-auto px-6">
+            <div id="faq-anchor" class="text-center mb-16 anchor-target">
+                <span class="inline-block px-4 py-1.5 bg-primary/10 text-primary text-sm font-semibold rounded-full mb-4">
+                    常见问题
+                </span>
+                <h2 class="text-3xl font-bold">有问题？</h2>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="bg-white rounded-xl border border-border p-6">
+                    <h4 class="font-bold text-text-primary mb-2">图片会上传吗？</h4>
+                    <p class="text-text-secondary text-sm">完全不会。所有处理都在你的浏览器中完成，图片不会上传到任何服务器。</p>
+                </div>
+                
+                <div class="bg-white rounded-xl border border-border p-6">
+                    <h4 class="font-bold text-text-primary mb-2">支持哪些图片格式？</h4>
+                    <p class="text-text-secondary text-sm">支持 PNG、JPG、WebP 格式。建议使用 PNG 格式以获得最佳效果。</p>
+                </div>
+                
+                <div class="bg-white rounded-xl border border-border p-6">
+                    <h4 class="font-bold text-text-primary mb-2">水印去不干净怎么办？</h4>
+                    <p class="text-text-secondary text-sm">确保使用的是 Gemini 实际下载的原图，而不是截图。如果水印位置有变化，可能需要等待工具更新。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- WeChat QR Section -->
+    <section class="py-16 bg-gradient-to-b from-white to-primary/5">
+        <div class="max-w-4xl mx-auto px-6 text-center">
+            <div class="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary text-sm font-semibold rounded-full mb-6">
+                <i data-lucide="heart" class="w-4 h-4"></i>
+                关注我们
+            </div>
+            
+            <h3 class="text-2xl font-bold text-text-primary mb-4">获取更多工具</h3>
+            <p class="text-text-secondary mb-8">扫码关注公众号，获取更多实用 AI 工具</p>
+            
+            <div class="inline-flex items-center gap-8 bg-white rounded-2xl p-6 shadow-soft border border-border">
+                <div class="text-left">
+                    <img id="qrcode" src="./assets/qrcode.jpg" alt="公众号二维码" class="w-32 h-32 rounded-lg border border-border">
+                </div>
+                <div class="text-left">
+                    <h4 class="font-bold text-lg mb-2">联系我们</h4>
+                    <p class="text-text-secondary text-sm mb-4">扫码上方二维码<br>关注公众号</p>
+                    <div class="flex items-center gap-2 text-sm text-text-muted">
+                        <i data-lucide="message-circle" class="w-4 h-4"></i>
+                        <span>欢迎反馈问题</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-8 bg-white border-t border-border">
+        <div class="max-w-7xl mx-auto px-6 text-center">
+            <div class="flex items-center justify-center gap-2 text-text-muted text-sm mb-4">
+                <span>Made with</span>
+                <i data-lucide="heart" class="w-4 h-4 text-red-500"></i>
+                <span>by</span>
+                <a href="https://xkw.deepextractai.com/" target="_blank" class="text-primary hover:underline">开发者</a>
+            </div>
+            <p class="text-xs text-text-muted">
+                本项目开源免费，不附属于 Google Gemini。
+            </p>
+        </div>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script type="module" src="./js/app.js?v=20260301-11"></script>
+    
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        function getNavOffset() {
+            const nav = document.getElementById('main-nav');
+            return nav ? nav.offsetHeight + 8 : 88;
+        }
+
+        function smoothScrollToSelector(selector) {
+            if (selector === '#start-processing') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+
+            const target = document.querySelector(selector);
+            if (!target) return;
+            const top = target.getBoundingClientRect().top + window.scrollY - getNavOffset();
+            window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' });
+        }
+
+        function bindNavScroll() {
+            const navLinks = document.querySelectorAll('[data-nav-target]');
+            navLinks.forEach((link) => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const selector = link.getAttribute('data-nav-target');
+                    if (!selector) return;
+                    smoothScrollToSelector(selector);
+                });
+            });
+        }
+
+        bindNavScroll();
+        
+        let currentFile = null;
+        let resultBlob = null;
+        let resultObjectUrl = null;
+        let originalObjectUrl = null;
+        let engineReady = false;
+
+        function setResultStatus(state) {
+            const badge = document.getElementById('result-status-badge');
+            const dot = document.getElementById('result-status-dot');
+            const label = document.getElementById('result-status-label');
+            const text = document.getElementById('result-status-text');
+
+            if (state === 'waiting') {
+                badge.className = 'inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-text-secondary text-sm font-semibold rounded-full mb-4';
+                dot.className = 'w-2 h-2 rounded-full bg-slate-400';
+                label.textContent = '等待处理';
+                text.textContent = '上传图片并点击开始处理后，这里会展示前后对比图';
+                return;
+            }
+
+            if (state === 'ready') {
+                badge.className = 'inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-primary text-sm font-semibold rounded-full mb-4';
+                dot.className = 'w-2 h-2 rounded-full bg-primary';
+                label.textContent = '已选择文件';
+                text.textContent = '点击“开始去除水印”即可生成结果图';
+                return;
+            }
+
+            if (state === 'processing') {
+                badge.className = 'inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 text-sm font-semibold rounded-full mb-4';
+                dot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
+                label.textContent = '处理中';
+                text.textContent = '正在去除水印，请稍候...';
+                return;
+            }
+
+            badge.className = 'inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-600 text-sm font-semibold rounded-full mb-4';
+            dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+            label.textContent = '处理完成';
+            text.textContent = '已生成结果图，支持立即下载';
+        }
+        
+        // Check engine status periodically
+        setTimeout(() => {
+            if (!engineReady) {
+                console.log('Waiting for engine...');
+            }
+        }, 1000);
+        
+        // Expose engine status checker for app.js
+        window.setEngineReady = function(ready) {
+            engineReady = ready;
+            console.log('Engine ready:', ready);
+        };
+        
+        function scrollToFeatures() {
+            document.getElementById('features').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Drag & Drop
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('upload-overlay').classList.remove('opacity-0');
+        }
+        
+        function handleDragLeave(e) {
+            e.preventDefault();
+            document.getElementById('upload-overlay').classList.add('opacity-0');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            document.getElementById('upload-overlay').classList.add('opacity-0');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+        
+        function handleFileSelect(input) {
+            if (input.files.length > 0) {
+                handleFile(input.files[0]);
+            }
+        }
+        
+        function handleFile(file) {
+            if (!file.type.match('image.*')) {
+                alert('请选择图片文件');
+                return;
+            }
+            
+            currentFile = file;
+
+            if (originalObjectUrl) {
+                URL.revokeObjectURL(originalObjectUrl);
+            }
+            originalObjectUrl = URL.createObjectURL(file);
+
+            const originalImage = document.getElementById('original-image');
+            originalImage.src = originalObjectUrl;
+            originalImage.classList.remove('hidden');
+            document.getElementById('original-placeholder').classList.add('hidden');
+
+            document.getElementById('result-image').classList.add('hidden');
+            document.getElementById('result-placeholder').classList.remove('hidden');
+            document.getElementById('result-placeholder-title').textContent = '等待处理结果';
+            document.getElementById('result-placeholder-desc').textContent = '处理完成后会在这里实时预览';
+
+            resultBlob = null;
+            if (resultObjectUrl) {
+                URL.revokeObjectURL(resultObjectUrl);
+                resultObjectUrl = null;
+            }
+
+            const downloadBtn = document.getElementById('download-btn');
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            document.getElementById('original-size').textContent = '';
+            setResultStatus('ready');
+            
+            document.getElementById('upload-content').classList.add('hidden');
+            document.getElementById('file-info').classList.remove('hidden');
+            document.getElementById('filename').textContent = file.name;
+            document.getElementById('filesize').textContent = formatFileSize(file.size);
+            
+            const processBtn = document.getElementById('process-btn');
+            processBtn.disabled = false;
+            processBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
+        function startProcessing() {
+            if (!currentFile) return;
+            
+            if (!engineReady) {
+                alert('引擎正在初始化，请稍等片刻后重试');
+                return;
+            }
+            
+            // Show processing overlay
+            document.getElementById('processing-overlay').classList.remove('hidden');
+            setResultStatus('processing');
+            document.getElementById('result-placeholder-title').textContent = '正在去除水印...';
+            document.getElementById('result-placeholder-desc').textContent = '请稍候，处理完成后自动展示';
+            
+            // Wait a bit for the UI to update
+            setTimeout(() => {
+                // The actual processing will be done by app.js
+                // Here we just show the overlay
+                window.dispatchEvent(new CustomEvent('startProcess', { detail: currentFile }));
+            }, 100);
+        }
+        
+        function showResult(originalSrc, resultSrc, originalSize, blob) {
+            document.getElementById('processing-overlay').classList.add('hidden');
+            document.getElementById('original-image').src = originalSrc;
+            document.getElementById('original-image').classList.remove('hidden');
+            document.getElementById('original-placeholder').classList.add('hidden');
+
+            let finalResultSrc = resultSrc;
+            if (!finalResultSrc && blob instanceof Blob) {
+                finalResultSrc = URL.createObjectURL(blob);
+            }
+
+            if (!finalResultSrc) {
+                console.error('Missing result image source');
+                alert('处理完成但结果图地址为空，请重试');
+                return;
+            }
+
+            if (resultObjectUrl) {
+                URL.revokeObjectURL(resultObjectUrl);
+            }
+            resultObjectUrl = finalResultSrc;
+            const resultImage = document.getElementById('result-image');
+            resultImage.onerror = () => {
+                console.error('Failed to render result image:', finalResultSrc);
+            };
+            resultImage.src = finalResultSrc;
+            resultImage.classList.remove('hidden');
+            document.getElementById('result-placeholder').classList.add('hidden');
+            document.getElementById('original-size').textContent = originalSize;
+
+            const downloadBtn = document.getElementById('download-btn');
+            downloadBtn.disabled = false;
+            downloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            setResultStatus('done');
+            
+            // Show success toast
+            showToast('图片已处理完成');
+            
+            // Auto download
+            setTimeout(() => {
+                downloadResult();
+            }, 1500);
+            
+            // Scroll to result
+            document.getElementById('result-section').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function downloadResult() {
+            if (!resultBlob) return;
+
+            const a = document.createElement('a');
+            const downloadUrl = URL.createObjectURL(resultBlob);
+            a.href = downloadUrl;
+            a.download = 'clean_' + (currentFile ? currentFile.name.replace(/\.[^/.]+$/, "") : 'image') + '.png';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+        }
+        
+        function resetApp() {
+            currentFile = null;
+            resultBlob = null;
+
+            if (originalObjectUrl) {
+                URL.revokeObjectURL(originalObjectUrl);
+                originalObjectUrl = null;
+            }
+
+            if (resultObjectUrl) {
+                URL.revokeObjectURL(resultObjectUrl);
+                resultObjectUrl = null;
+            }
+
+            const originalImage = document.getElementById('original-image');
+            originalImage.src = '';
+            originalImage.classList.add('hidden');
+            document.getElementById('original-placeholder').classList.remove('hidden');
+
+            const resultImage = document.getElementById('result-image');
+            resultImage.src = '';
+            resultImage.classList.add('hidden');
+            document.getElementById('result-placeholder').classList.remove('hidden');
+            document.getElementById('result-placeholder-title').textContent = '等待处理结果';
+            document.getElementById('result-placeholder-desc').textContent = '处理完成后会在这里实时预览';
+
+            const downloadBtn = document.getElementById('download-btn');
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            document.getElementById('original-size').textContent = '';
+            setResultStatus('waiting');
+            
+            document.getElementById('upload-content').classList.remove('hidden');
+            document.getElementById('file-info').classList.add('hidden');
+            
+            const processBtn = document.getElementById('process-btn');
+            processBtn.disabled = true;
+            processBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            
+            document.getElementById('file-input').value = '';
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4000);
+        }
+        
+        // Listen for processing complete from app.js
+        window.addEventListener('processingComplete', function(e) {
+            const { originalSrc, resultSrc, width, height, blob } = e.detail;
+            resultBlob = blob;
+            showResult(originalSrc, resultSrc, `${width} × ${height}`, blob);
+        });
+    </script>
+</body>
+</html>
