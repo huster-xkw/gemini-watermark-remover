@@ -1,4 +1,5 @@
 # AI 水印去除器
+在线体验链接：https://xkw.deepextractai.com/article/
 
 一个纯前端、可本地运行的 Gemini 图片可见水印去除工具。
 
